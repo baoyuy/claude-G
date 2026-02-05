@@ -27,7 +27,6 @@ echo ""
 INSTALL_DIR=${INSTALL_DIR:-"/opt/claude-G"}
 
 if [ ! -d "$INSTALL_DIR" ]; then
-    # 尝试其他常见位置
     if [ -d "/root/claude-G" ]; then
         INSTALL_DIR="/root/claude-G"
     elif [ -d "$HOME/claude-G" ]; then
@@ -49,12 +48,6 @@ fi
 CURRENT_VERSION=$(cat VERSION 2>/dev/null || echo "unknown")
 info "当前版本: $CURRENT_VERSION"
 
-# 备份配置
-info "备份配置文件..."
-if [ -f ".env" ]; then
-    cp .env .env.backup.$(date +%Y%m%d%H%M%S)
-fi
-
 # 拉取最新代码
 info "拉取最新代码..."
 git fetch origin main
@@ -62,36 +55,32 @@ git reset --hard origin/main
 
 # 获取新版本
 NEW_VERSION=$(cat VERSION 2>/dev/null || echo "unknown")
-info "新版本: $NEW_VERSION"
 
 if [ "$CURRENT_VERSION" = "$NEW_VERSION" ]; then
-    success "当前已是最新版本"
-else
-    success "代码更新完成: $CURRENT_VERSION -> $NEW_VERSION"
+    success "当前已是最新版本 ($CURRENT_VERSION)"
+    echo ""
+    exit 0
 fi
 
-# 重建并重启容器
-info "重建 Docker 镜像..."
+info "发现新版本: $CURRENT_VERSION -> $NEW_VERSION"
+
+# 重启容器（使用新代码，不重新构建镜像）
+info "重启服务..."
 if docker compose version &> /dev/null; then
-    docker compose build --no-cache
-    info "重启服务..."
-    docker compose up -d
+    docker compose up -d --force-recreate
 else
-    docker-compose build --no-cache
-    info "重启服务..."
-    docker-compose up -d
+    docker-compose up -d --force-recreate
 fi
 
-# 等待服务启动
+# 等待服务启动（缩短等待时间）
 info "等待服务启动..."
-sleep 10
-
-# 检查服务状态
-if curl -s http://localhost:3000/health > /dev/null 2>&1; then
-    success "服务重启成功！"
-else
-    warn "服务可能还在启动中，请稍后检查"
-fi
+for i in {1..6}; do
+    if curl -s http://localhost:3000/health > /dev/null 2>&1; then
+        success "服务重启成功！"
+        break
+    fi
+    sleep 1
+done
 
 echo ""
 echo -e "${GREEN}╔════════════════════════════════════════════════════════════╗${NC}"
