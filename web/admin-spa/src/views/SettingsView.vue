@@ -1800,7 +1800,9 @@
     <!-- 系统更新部分 -->
     <div v-show="activeSection === 'systemUpdate'" class="space-y-6">
       <!-- 系统信息卡片 -->
-      <div class="rounded-xl border border-gray-200 bg-white p-6 dark:border-gray-700 dark:bg-gray-800">
+      <div
+        class="rounded-xl border border-gray-200 bg-white p-6 dark:border-gray-700 dark:bg-gray-800"
+      >
         <h4 class="mb-4 flex items-center text-lg font-semibold text-gray-900 dark:text-gray-100">
           <i class="fas fa-info-circle mr-2 text-blue-500"></i>
           系统信息
@@ -1837,7 +1839,9 @@
       </div>
 
       <!-- 版本更新卡片 -->
-      <div class="rounded-xl border border-gray-200 bg-white p-6 dark:border-gray-700 dark:bg-gray-800">
+      <div
+        class="rounded-xl border border-gray-200 bg-white p-6 dark:border-gray-700 dark:bg-gray-800"
+      >
         <h4 class="mb-4 flex items-center text-lg font-semibold text-gray-900 dark:text-gray-100">
           <i class="fas fa-cloud-download-alt mr-2 text-green-500"></i>
           版本更新
@@ -1852,7 +1856,10 @@
         <!-- 更新信息 -->
         <div v-else>
           <!-- 有新版本 -->
-          <div v-if="updateInfo.hasUpdate" class="mb-4 rounded-lg border border-green-200 bg-green-50 p-4 dark:border-green-800 dark:bg-green-900/20">
+          <div
+            v-if="updateInfo.hasUpdate"
+            class="mb-4 rounded-lg border border-green-200 bg-green-50 p-4 dark:border-green-800 dark:bg-green-900/20"
+          >
             <div class="flex items-center">
               <i class="fas fa-arrow-circle-up mr-2 text-xl text-green-500"></i>
               <div>
@@ -1864,24 +1871,31 @@
                 </div>
               </div>
             </div>
-            <div v-if="updateInfo.releaseInfo" class="mt-3 border-t border-green-200 pt-3 dark:border-green-800">
+            <div
+              v-if="updateInfo.releaseInfo"
+              class="mt-3 border-t border-green-200 pt-3 dark:border-green-800"
+            >
               <div class="text-sm font-medium text-green-800 dark:text-green-300">
                 {{ updateInfo.releaseInfo.name }}
               </div>
-              <div class="mt-1 whitespace-pre-wrap text-sm text-green-700 dark:text-green-400" style="max-height: 200px; overflow-y: auto;">
+              <div
+                class="mt-1 whitespace-pre-wrap text-sm text-green-700 dark:text-green-400"
+                style="max-height: 200px; overflow-y: auto"
+              >
                 {{ updateInfo.releaseInfo.body }}
               </div>
             </div>
           </div>
 
           <!-- 已是最新 -->
-          <div v-else class="mb-4 rounded-lg border border-blue-200 bg-blue-50 p-4 dark:border-blue-800 dark:bg-blue-900/20">
+          <div
+            v-else
+            class="mb-4 rounded-lg border border-blue-200 bg-blue-50 p-4 dark:border-blue-800 dark:bg-blue-900/20"
+          >
             <div class="flex items-center">
               <i class="fas fa-check-circle mr-2 text-xl text-blue-500"></i>
               <div>
-                <div class="font-semibold text-blue-800 dark:text-blue-300">
-                  当前已是最新版本
-                </div>
+                <div class="font-semibold text-blue-800 dark:text-blue-300">当前已是最新版本</div>
                 <div class="text-sm text-blue-600 dark:text-blue-400">
                   版本: v{{ updateInfo.current }}
                 </div>
@@ -1921,7 +1935,10 @@
           </div>
 
           <!-- Docker更新提示 -->
-          <div v-if="dockerUpdateCommands" class="mt-4 rounded-lg border border-yellow-200 bg-yellow-50 p-4 dark:border-yellow-800 dark:bg-yellow-900/20">
+          <div
+            v-if="dockerUpdateCommands"
+            class="mt-4 rounded-lg border border-yellow-200 bg-yellow-50 p-4 dark:border-yellow-800 dark:bg-yellow-900/20"
+          >
             <div class="mb-2 flex items-center font-medium text-yellow-800 dark:text-yellow-300">
               <i class="fas fa-docker mr-2"></i>
               Docker环境更新指令
@@ -1937,7 +1954,9 @@
       </div>
 
       <!-- 一键部署脚本 -->
-      <div class="rounded-xl border border-gray-200 bg-white p-6 dark:border-gray-700 dark:bg-gray-800">
+      <div
+        class="rounded-xl border border-gray-200 bg-white p-6 dark:border-gray-700 dark:bg-gray-800"
+      >
         <h4 class="mb-4 flex items-center text-lg font-semibold text-gray-900 dark:text-gray-100">
           <i class="fas fa-terminal mr-2 text-purple-500"></i>
           一键部署
@@ -2191,7 +2210,8 @@ const restartService = async () => {
 
 // 复制安装命令
 const copyInstallCommand = async () => {
-  const command = 'curl -fsSL https://raw.githubusercontent.com/baoyuy/claude-G/main/install.sh | bash'
+  const command =
+    'curl -fsSL https://raw.githubusercontent.com/baoyuy/claude-G/main/install.sh | bash'
   try {
     await navigator.clipboard.writeText(command)
     showToast('安装命令已复制到剪贴板', 'success')

@@ -303,9 +303,7 @@ const getPreviewText = () => {
 
 // 一键复制所有卡密
 const copyAllKeys = async () => {
-  const content = props.apiKeys
-    .map((key) => key.apiKey || key.key || '')
-    .join('\n')
+  const content = props.apiKeys.map((key) => key.apiKey || key.key || '').join('\n')
 
   try {
     await navigator.clipboard.writeText(content)

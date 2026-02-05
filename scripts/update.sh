@@ -64,25 +64,13 @@ fi
 
 info "发现新版本: $CURRENT_VERSION -> $NEW_VERSION"
 
-# 检测Docker Compose命令
-if docker compose version &> /dev/null; then
-    DC="docker compose"
-else
-    DC="docker-compose"
-fi
-
-# 构建前端（在容器内执行）
-info "构建前端资源..."
-$DC exec -T claude-relay npm run build:web 2>/dev/null || {
-    warn "容器内构建失败，尝试重启后构建..."
-    $DC up -d --force-recreate
-    sleep 5
-    $DC exec -T claude-relay npm run build:web 2>/dev/null || warn "前端构建跳过"
-}
-
 # 重启服务
 info "重启服务..."
-$DC restart
+if docker compose version &> /dev/null; then
+    docker compose restart
+else
+    docker-compose restart
+fi
 
 # 等待服务启动
 info "等待服务启动..."

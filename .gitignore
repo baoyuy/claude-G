@@ -245,5 +245,5 @@ out/
 web/admin/
 web/apiStats/
 
-# Admin SPA build files
-web/admin-spa/dist/
+# Admin SPA build files - 保留构建产物用于快速部署
+# web/admin-spa/dist/

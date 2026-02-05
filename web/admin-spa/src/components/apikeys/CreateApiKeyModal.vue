@@ -49,13 +49,18 @@
               <button
                 v-for="preset in presets"
                 :key="preset.id"
-                class="inline-flex items-center gap-1.5 rounded-lg border border-purple-300 bg-white px-3 py-1.5 text-xs font-medium text-purple-700 transition-all hover:bg-purple-100 hover:shadow-sm dark:border-pe-600 dark:bg-purple-900/30 dark:text-purple-300 dark:hover:bg-purple-900/50"
+                class="group inline-flex items-center gap-1.5 rounded-lg border border-purple-300 bg-white px-3 py-1.5 text-xs font-medium text-purple-700 transition-all hover:bg-purple-100 hover:shadow-sm dark:border-purple-600 dark:bg-purple-900/30 dark:text-purple-300 dark:hover:bg-purple-900/50"
                 type="button"
                 @click="applyPreset(preset)"
               >
                 <i class="fas fa-bolt"></i>
                 {{ preset.name }}
                 <span class="text-purple-500">({{ preset.batchCount }}个)</span>
+                <i
+                  class="fas fa-times ml-1 text-gray-400 opacity-0 transition-opacity hover:text-red-500 group-hover:opacity-100"
+                  title="删除预设"
+                  @click.stop="deletePreset(preset.id)"
+                ></i>
               </button>
               <button
                 class="inline-flex items-center gap-1.5 rounded-lg border border-dashed border-gray-300 bg-gray-50 px-3 py-1.5 text-xs font-medium text-gray-600 transition-all hover:border-purple-400 hover:bg-purple-50 hover:text-purple-600 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-400 dark:hover:border-purple-500 dark:hover:text-purple-400"
@@ -1209,7 +1214,7 @@ const saveCurrentAsPreset = async () => {
 
 // 删除预设
 const deletePreset = (presetId) => {
-  const index = presets.value.findIndex(p => p.id === presetId)
+  const index = presets.value.findIndex((p) => p.id === presetId)
   if (index > -1) {
     const preset = presets.value[index]
     presets.value.splice(index, 1)
