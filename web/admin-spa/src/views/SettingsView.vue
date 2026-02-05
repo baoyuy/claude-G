@@ -60,6 +60,18 @@
             <i class="fas fa-balance-scale mr-2"></i>
             服务倍率
           </button>
+          <button
+            :class="[
+              'border-b-2 pb-2 text-sm font-medium transition-colors',
+              activeSection === 'systemUpdate'
+                ? 'border-blue-500 text-blue-600 dark:border-blue-400 dark:text-blue-400'
+                : 'border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-300'
+            ]"
+            @click="activeSection = 'systemUpdate'"
+          >
+            <i class="fas fa-sync-alt mr-2"></i>
+            系统更新
+          </button>
         </nav>
       </div>
 
@@ -1785,6 +1797,169 @@
       </div>
     </div>
 
+    <!-- 系统更新部分 -->
+    <div v-show="activeSection === 'systemUpdate'" class="space-y-6">
+      <!-- 系统信息卡片 -->
+      <div class="rounded-xl border border-gray-200 bg-white p-6 dark:border-gray-700 dark:bg-gray-800">
+        <h4 class="mb-4 flex items-center text-lg font-semibold text-gray-900 dark:text-gray-100">
+          <i class="fas fa-info-circle mr-2 text-blue-500"></i>
+          系统信息
+        </h4>
+        <div v-if="systemInfoLoading" class="py-4 text-center">
+          <i class="fas fa-spinner fa-spin text-2xl text-gray-400"></i>
+        </div>
+        <div v-else class="grid grid-cols-2 gap-4 md:grid-cols-4">
+          <div class="rounded-lg bg-gray-50 p-4 dark:bg-gray-700">
+            <div class="text-sm text-gray-500 dark:text-gray-400">当前版本</div>
+            <div class="text-lg font-semibold text-gray-900 dark:text-gray-100">
+              v{{ systemInfo.version }}
+            </div>
+          </div>
+          <div class="rounded-lg bg-gray-50 p-4 dark:bg-gray-700">
+            <div class="text-sm text-gray-500 dark:text-gray-400">运行环境</div>
+            <div class="text-lg font-semibold text-gray-900 dark:text-gray-100">
+              {{ systemInfo.isDocker ? 'Docker' : 'Native' }}
+            </div>
+          </div>
+          <div class="rounded-lg bg-gray-50 p-4 dark:bg-gray-700">
+            <div class="text-sm text-gray-500 dark:text-gray-400">Node版本</div>
+            <div class="text-lg font-semibold text-gray-900 dark:text-gray-100">
+              {{ systemInfo.nodeVersion }}
+            </div>
+          </div>
+          <div class="rounded-lg bg-gray-50 p-4 dark:bg-gray-700">
+            <div class="text-sm text-gray-500 dark:text-gray-400">运行时间</div>
+            <div class="text-lg font-semibold text-gray-900 dark:text-gray-100">
+              {{ formatUptime(systemInfo.uptime) }}
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 版本更新卡片 -->
+      <div class="rounded-xl border border-gray-200 bg-white p-6 dark:border-gray-700 dark:bg-gray-800">
+        <h4 class="mb-4 flex items-center text-lg font-semibold text-gray-900 dark:text-gray-100">
+          <i class="fas fa-cloud-download-alt mr-2 text-green-500"></i>
+          版本更新
+        </h4>
+
+        <!-- 检查更新状态 -->
+        <div v-if="checkingUpdate" class="py-8 text-center">
+          <i class="fas fa-spinner fa-spin text-3xl text-blue-500"></i>
+          <p class="mt-2 text-gray-500 dark:text-gray-400">正在检查更新...</p>
+        </div>
+
+        <!-- 更新信息 -->
+        <div v-else>
+          <!-- 有新版本 -->
+          <div v-if="updateInfo.hasUpdate" class="mb-4 rounded-lg border border-green-200 bg-green-50 p-4 dark:border-green-800 dark:bg-green-900/20">
+            <div class="flex items-center">
+              <i class="fas fa-arrow-circle-up mr-2 text-xl text-green-500"></i>
+              <div>
+                <div class="font-semibold text-green-800 dark:text-green-300">
+                  发现新版本: v{{ updateInfo.latest }}
+                </div>
+                <div class="text-sm text-green-600 dark:text-green-400">
+                  当前版本: v{{ updateInfo.current }}
+                </div>
+              </div>
+            </div>
+            <div v-if="updateInfo.releaseInfo" class="mt-3 border-t border-green-200 pt-3 dark:border-green-800">
+              <div class="text-sm font-medium text-green-800 dark:text-green-300">
+                {{ updateInfo.releaseInfo.name }}
+              </div>
+              <div class="mt-1 whitespace-pre-wrap text-sm text-green-700 dark:text-green-400" style="max-height: 200px; overflow-y: auto;">
+                {{ updateInfo.releaseInfo.body }}
+              </div>
+            </div>
+          </div>
+
+          <!-- 已是最新 -->
+          <div v-else class="mb-4 rounded-lg border border-blue-200 bg-blue-50 p-4 dark:border-blue-800 dark:bg-blue-900/20">
+            <div class="flex items-center">
+              <i class="fas fa-check-circle mr-2 text-xl text-blue-500"></i>
+              <div>
+                <div class="font-semibold text-blue-800 dark:text-blue-300">
+                  当前已是最新版本
+                </div>
+                <div class="text-sm text-blue-600 dark:text-blue-400">
+                  版本: v{{ updateInfo.current }}
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- 操作按钮 -->
+          <div class="flex flex-wrap gap-3">
+            <button
+              class="flex items-center rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-gray-400"
+              :disabled="checkingUpdate"
+              @click="checkForUpdates(true)"
+            >
+              <i class="fas fa-sync-alt mr-2" :class="{ 'fa-spin': checkingUpdate }"></i>
+              检查更新
+            </button>
+
+            <button
+              v-if="updateInfo.hasUpdate"
+              class="flex items-center rounded-lg bg-green-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-green-700 disabled:cursor-not-allowed disabled:bg-gray-400"
+              :disabled="performingUpdate"
+              @click="performUpdate"
+            >
+              <i class="fas fa-download mr-2" :class="{ 'fa-spin': performingUpdate }"></i>
+              {{ performingUpdate ? '更新中...' : '立即更新' }}
+            </button>
+
+            <button
+              class="flex items-center rounded-lg bg-orange-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-orange-700 disabled:cursor-not-allowed disabled:bg-gray-400"
+              :disabled="restartingService"
+              @click="restartService"
+            >
+              <i class="fas fa-redo mr-2" :class="{ 'fa-spin': restartingService }"></i>
+              {{ restartingService ? '重启中...' : '重启服务' }}
+            </button>
+          </div>
+
+          <!-- Docker更新提示 -->
+          <div v-if="dockerUpdateCommands" class="mt-4 rounded-lg border border-yellow-200 bg-yellow-50 p-4 dark:border-yellow-800 dark:bg-yellow-900/20">
+            <div class="mb-2 flex items-center font-medium text-yellow-800 dark:text-yellow-300">
+              <i class="fas fa-docker mr-2"></i>
+              Docker环境更新指令
+            </div>
+            <div class="rounded bg-gray-800 p-3 text-sm text-green-400">
+              <pre class="whitespace-pre-wrap">{{ dockerUpdateCommands.join('\n') }}</pre>
+            </div>
+            <div class="mt-2 text-sm text-yellow-700 dark:text-yellow-400">
+              {{ dockerUpdateHint }}
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 一键部署脚本 -->
+      <div class="rounded-xl border border-gray-200 bg-white p-6 dark:border-gray-700 dark:bg-gray-800">
+        <h4 class="mb-4 flex items-center text-lg font-semibold text-gray-900 dark:text-gray-100">
+          <i class="fas fa-terminal mr-2 text-purple-500"></i>
+          一键部署
+        </h4>
+        <p class="mb-3 text-sm text-gray-600 dark:text-gray-400">
+          在新服务器上快速部署 claude-G 服务：
+        </p>
+        <div class="rounded-lg bg-gray-800 p-4">
+          <code class="text-sm text-green-400">
+            curl -fsSL https://raw.githubusercontent.com/baoyuy/claude-G/main/install.sh | bash
+          </code>
+        </div>
+        <button
+          class="mt-3 flex items-center rounded-lg bg-purple-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-purple-700"
+          @click="copyInstallCommand"
+        >
+          <i class="fas fa-copy mr-2"></i>
+          复制命令
+        </button>
+      </div>
+    </div>
+
     <!-- ConfirmModal -->
     <ConfirmModal
       :cancel-text="confirmModalConfig.cancelText"
@@ -1871,6 +2046,159 @@ const hideAdminButton = computed({
     oemSettings.value.showAdminButton = !value
   }
 })
+
+// ==================== 系统更新相关 ====================
+const systemInfoLoading = ref(false)
+const systemInfo = ref({
+  version: '1.0.0',
+  isDocker: false,
+  nodeVersion: '',
+  platform: '',
+  uptime: 0,
+  memory: { used: 0, total: 0 }
+})
+
+const checkingUpdate = ref(false)
+const performingUpdate = ref(false)
+const restartingService = ref(false)
+const updateInfo = ref({
+  current: '1.0.0',
+  latest: '1.0.0',
+  hasUpdate: false,
+  releaseInfo: null
+})
+const dockerUpdateCommands = ref(null)
+const dockerUpdateHint = ref('')
+
+// 格式化运行时间
+const formatUptime = (seconds) => {
+  if (!seconds) return '0秒'
+  const days = Math.floor(seconds / 86400)
+  const hours = Math.floor((seconds % 86400) / 3600)
+  const minutes = Math.floor((seconds % 3600) / 60)
+
+  const parts = []
+  if (days > 0) parts.push(`${days}天`)
+  if (hours > 0) parts.push(`${hours}小时`)
+  if (minutes > 0) parts.push(`${minutes}分钟`)
+  if (parts.length === 0) parts.push(`${seconds}秒`)
+
+  return parts.join('')
+}
+
+// 获取系统信息
+const fetchSystemInfo = async () => {
+  systemInfoLoading.value = true
+  try {
+    const res = await httpApis.getSystemInfo()
+    if (res.success) {
+      systemInfo.value = res.data
+    }
+  } catch (error) {
+    console.error('获取系统信息失败:', error)
+  } finally {
+    systemInfoLoading.value = false
+  }
+}
+
+// 检查更新
+const checkForUpdates = async (force = false) => {
+  checkingUpdate.value = true
+  dockerUpdateCommands.value = null
+  try {
+    const res = await httpApis.checkUpdates(force)
+    if (res.success) {
+      updateInfo.value = res.data
+    }
+  } catch (error) {
+    console.error('检查更新失败:', error)
+    showToast('检查更新失败: ' + (error.message || '未知错误'), 'error')
+  } finally {
+    checkingUpdate.value = false
+  }
+}
+
+// 执行更新
+const performUpdate = async () => {
+  const confirmed = await showConfirm(
+    '确认更新',
+    '确定要更新系统吗？更新过程中服务可能会短暂中断。',
+    '确认更新',
+    '取消',
+    'warning'
+  )
+
+  if (!confirmed) return
+
+  performingUpdate.value = true
+  dockerUpdateCommands.value = null
+
+  try {
+    const res = await httpApis.performUpdate()
+
+    if (res.success) {
+      if (res.isDocker) {
+        // Docker环境，显示更新命令
+        dockerUpdateCommands.value = res.commands
+        dockerUpdateHint.value = res.hint
+        showToast('Docker环境请在宿主机执行更新命令', 'warning')
+      } else if (res.updated) {
+        showToast('更新完成，请重启服务以生效', 'success')
+      } else {
+        showToast(res.message || '当前已是最新版本', 'info')
+      }
+    } else {
+      showToast('更新失败: ' + (res.message || '未知错误'), 'error')
+    }
+  } catch (error) {
+    console.error('执行更新失败:', error)
+    showToast('更新失败: ' + (error.message || '未知错误'), 'error')
+  } finally {
+    performingUpdate.value = false
+  }
+}
+
+// 重启服务
+const restartService = async () => {
+  const confirmed = await showConfirm(
+    '确认重启',
+    '确定要重启服务吗？重启期间服务将暂时不可用。',
+    '确认重启',
+    '取消',
+    'warning'
+  )
+
+  if (!confirmed) return
+
+  restartingService.value = true
+
+  try {
+    await httpApis.restartService()
+    showToast('服务正在重启，请稍后刷新页面...', 'success')
+
+    // 5秒后自动刷新页面
+    setTimeout(() => {
+      window.location.reload()
+    }, 5000)
+  } catch (error) {
+    // 重启时连接会断开，这是正常的
+    showToast('服务正在重启，请稍后刷新页面...', 'success')
+    setTimeout(() => {
+      window.location.reload()
+    }, 5000)
+  }
+}
+
+// 复制安装命令
+const copyInstallCommand = async () => {
+  const command = 'curl -fsSL https://raw.githubusercontent.com/baoyuy/claude-G/main/install.sh | bash'
+  try {
+    await navigator.clipboard.writeText(command)
+    showToast('安装命令已复制到剪贴板', 'success')
+  } catch (error) {
+    showToast('复制失败，请手动复制', 'error')
+  }
+}
 
 // URL 验证状态
 const urlError = ref(false)
@@ -1975,6 +2303,9 @@ const sectionWatcher = watch(activeSection, async (newSection) => {
     await loadClaudeConfig()
   } else if (newSection === 'serviceRates') {
     await loadServiceRates()
+  } else if (newSection === 'systemUpdate') {
+    await fetchSystemInfo()
+    await checkForUpdates()
   }
 })
 

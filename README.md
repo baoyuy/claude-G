@@ -14,45 +14,68 @@
 - **使用统计** - 详细记录 Token 使用量和费用
 - **智能调度** - 账户故障自动切换，负载均衡
 - **Web 管理界面** - 可视化管理和监控
+- **一键更新** - 支持在线检查更新和一键升级
 
-## 技术栈
-
-- **后端**: Node.js + Express
-- **数据库**: Redis
-- **前端**: Vue 3 + Vite + Tailwind CSS
-
-## 快速开始
+## 一键安装（推荐）
 
 ```bash
-# 安装依赖
-npm install
+curl -fsSL https://raw.githubusercontent.com/baoyuy/claude-G/main/install.sh | bash
+```
 
-# 复制配置文件
-cp config/config.example.js config/config.js
+安装完成后，运行以下命令初始化管理员账号：
+
+```bash
+cd /opt/claude-G && docker compose exec claude-relay npm run setup
+```
+
+## 一键更新
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/baoyuy/claude-G/main/scripts/update.sh | bash
+```
+
+或者在 Web 管理界面 -> 系统设置 -> 系统更新 中点击"检查更新"按钮。
+
+## 手动安装
+
+### 环境要求
+
+- Docker 20.10+
+- Docker Compose 2.0+
+
+### 安装步骤
+
+```bash
+# 克隆项目
+git clone https://github.com/baoyuy/claude-G.git
+cd claude-G
+
+# 配置环境变量
 cp .env.example .env
-
-# 初始化（生成管理员账号）
-npm run setup
-
-# 安装前端依赖并构建
-npm run install:web
-npm run build:web
+# 编辑 .env 文件，设置 JWT_SECRET 和 ENCRYPTION_KEY
 
 # 启动服务
-npm run service:start:daemon
+docker compose up -d
+
+# 初始化管理员账号
+docker compose exec claude-relay npm run setup
 ```
 
 ## 环境变量
 
 ```bash
-# 必填
+# 必填（安装脚本会自动生成）
 JWT_SECRET=你的JWT密钥（32字符以上）
 ENCRYPTION_KEY=加密密钥（必须32字符）
 
 # Redis配置
-REDIS_HOST=localhost
+REDIS_HOST=redis
 REDIS_PORT=6379
 REDIS_PASSWORD=
+
+# 服务配置
+PORT=3000
+BIND_HOST=0.0.0.0
 ```
 
 ## 使用方式
@@ -79,6 +102,29 @@ gemini
 访问 `http://你的服务器:3000/web` 进入管理界面
 
 管理员账号信息保存在 `data/init.json`
+
+## 常用命令
+
+```bash
+# 查看日志
+docker compose logs -f
+
+# 重启服务
+docker compose restart
+
+# 停止服务
+docker compose down
+
+# 查看服务状态
+docker compose ps
+```
+
+## 技术栈
+
+- **后端**: Node.js + Express
+- **数据库**: Redis
+- **前端**: Vue 3 + Vite + Tailwind CSS
+- **部署**: Docker + Docker Compose
 
 ## License
 

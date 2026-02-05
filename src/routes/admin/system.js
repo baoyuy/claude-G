@@ -128,7 +128,7 @@ router.get('/check-updates', authenticateAdmin, async (req, res) => {
     }
 
     // 请求 GitHub API
-    const githubRepo = 'wei-shaw/claude-relay-service'
+    const githubRepo = 'baoyuy/claude-G'
     const response = await axios.get(`https://api.github.com/repos/${githubRepo}/releases/latest`, {
       headers: {
         Accept: 'application/vnd.github.v3+json',
@@ -403,6 +403,159 @@ router.post('/claude-code-version/clear', authenticateAdmin, async (req, res) =>
     res.status(500).json({
       success: false,
       message: 'Failed to clear cache',
+      error: error.message
+    })
+  }
+})
+
+// ==================== 系统更新执行 ====================
+
+const { exec } = require('child_process')
+const util = require('util')
+const execPromise = util.promisify(exec)
+
+// 执行系统更新
+router.post('/perform-update', authenticateAdmin, async (req, res) => {
+  try {
+    logger.info('🔄 Starting system update...')
+
+    // 检查是否在Docker环境中
+    const isDocker = fs.existsSync('/.dockerenv')
+
+    if (isDocker) {
+      // Docker环境：需要通过特殊方式更新
+      // 这里返回更新指令，让用户在宿主机执行
+      return res.json({
+        success: true,
+        isDocker: true,
+        message: 'Docker环境检测到，请在宿主机执行以下命令更新：',
+        commands: [
+          'cd /path/to/claude-G',
+          'docker-compose pull',
+          'docker-compose up -d'
+        ],
+        hint: '或者使用一键更新脚本: curl -fsSL https://raw.githubusercontent.com/baoyuy/claude-G/main/scripts/update.sh | bash'
+      })
+    }
+
+    // 非Docker环境：直接执行git pull
+    const projectRoot = path.join(__dirname, '../../..')
+
+    // 执行git pull
+    const { stdout: pullOutput, stderr: pullError } = await execPromise('git pull origin main', {
+      cwd: projectRoot,
+      timeout: 60000
+    })
+
+    logger.info('📥 Git pull completed:', pullOutput)
+
+    // 检查是否有更新
+    if (pullOutput.includes('Already up to date')) {
+      return res.json({
+        success: true,
+        message: '当前已是最新版本',
+        updated: false,
+        output: pullOutput
+      })
+    }
+
+    // 安装依赖
+    logger.info('📦 Installing dependencies...')
+    const { stdout: npmOutput } = await execPromise('npm install', {
+      cwd: projectRoot,
+      timeout: 120000
+    })
+
+    // 构建前端
+    logger.info('🔨 Building frontend...')
+    try {
+      await execPromise('npm run build:web', {
+        cwd: projectRoot,
+        timeout: 180000
+      })
+    } catch (buildErr) {
+      logger.warn('⚠️ Frontend build warning:', buildErr.message)
+    }
+
+    return res.json({
+      success: true,
+      message: '更新完成，请重启服务以生效',
+      updated: true,
+      output: pullOutput,
+      needRestart: true
+    })
+
+  } catch (error) {
+    logger.error('❌ System update failed:', error)
+    return res.status(500).json({
+      success: false,
+      error: 'Update failed',
+      message: error.message
+    })
+  }
+})
+
+// 重启服务
+router.post('/restart-service', authenticateAdmin, async (req, res) => {
+  try {
+    logger.info('🔄 Restarting service...')
+
+    // 发送响应后再重启
+    res.json({
+      success: true,
+      message: '服务即将重启...'
+    })
+
+    // 延迟1秒后重启，确保响应已发送
+    setTimeout(() => {
+      logger.info('👋 Service restarting now...')
+      process.exit(0) // PM2或Docker会自动重启
+    }, 1000)
+
+  } catch (error) {
+    logger.error('❌ Service restart failed:', error)
+    return res.status(500).json({
+      success: false,
+      error: 'Restart failed',
+      message: error.message
+    })
+  }
+})
+
+// 获取系统信息
+router.get('/system-info', authenticateAdmin, async (req, res) => {
+  try {
+    const versionPath = path.join(__dirname, '../../../VERSION')
+    let currentVersion = '1.0.0'
+    try {
+      currentVersion = fs.readFileSync(versionPath, 'utf8').trim()
+    } catch (err) {
+      // ignore
+    }
+
+    const isDocker = fs.existsSync('/.dockerenv')
+    const uptime = process.uptime()
+    const memUsage = process.memoryUsage()
+
+    return res.json({
+      success: true,
+      data: {
+        version: currentVersion,
+        isDocker,
+        nodeVersion: process.version,
+        platform: process.platform,
+        uptime: Math.floor(uptime),
+        memory: {
+          used: Math.round(memUsage.heapUsed / 1024 / 1024),
+          total: Math.round(memUsage.heapTotal / 1024 / 1024)
+        },
+        pid: process.pid
+      }
+    })
+  } catch (error) {
+    logger.error('❌ Failed to get system info:', error)
+    return res.status(500).json({
+      success: false,
       error: error.message
     })
   }

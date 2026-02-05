@@ -334,3 +334,10 @@ export const getClaudeCodeVersionApi = () =>
   request({ url: '/admin/claude-code-version', method: 'GET' })
 export const clearClaudeCodeVersionApi = () =>
   request({ url: '/admin/claude-code-version/clear', method: 'POST' })
+
+// 系统更新
+export const checkUpdates = (force = false) =>
+  request({ url: `/admin/check-updates${force ? '?force=true' : ''}`, method: 'GET' })
+export const getSystemInfo = () => request({ url: '/admin/system-info', method: 'GET' })
+export const performUpdate = () => request({ url: '/admin/perform-update', method: 'POST' })
+export const restartService = () => request({ url: '/admin/restart-service', method: 'POST' })
