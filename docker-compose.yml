@@ -15,6 +15,11 @@ services:
     volumes:
       - ./logs:/app/logs
       - ./data:/app/data
+      - ./src:/app/src
+      - ./scripts:/app/scripts
+      - ./config:/app/config
+      - ./cli:/app/cli
+      - ./VERSION:/app/VERSION
     environment:
       # 🌐 服务器配置
       - NODE_ENV=production
