@@ -144,16 +144,23 @@
         </div>
 
         <!-- 操作按钮 -->
-        <div class="flex gap-3">
+        <div class="flex flex-wrap gap-3">
           <button
             class="btn btn-primary flex flex-1 items-center justify-center gap-2 px-6 py-3 font-semibold"
+            @click="copyAllKeys"
+          >
+            <i class="fas fa-copy" />
+            一键复制所有卡密
+          </button>
+          <button
+            class="flex flex-1 items-center justify-center gap-2 rounded-xl border border-blue-300 bg-blue-50 px-6 py-3 font-semibold text-blue-700 transition-colors hover:bg-blue-100 dark:border-blue-600 dark:bg-blue-900/20 dark:text-blue-400 dark:hover:bg-blue-900/40"
             @click="downloadApiKeys"
           >
             <i class="fas fa-download" />
-            下载所有 API Keys
+            下载文件
           </button>
           <button
-            class="rounded-xl border border-gray-300 bg-gray-200 px-6 py-3 font-semibold text-gray-800 transition-colors hover:bg-gray-300"
+            class="rounded-xl border border-gray-300 bg-gray-200 px-6 py-3 font-semibold text-gray-800 transition-colors hover:bg-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-200 dark:hover:bg-gray-600"
             @click="handleClose"
           >
             我已保存
@@ -292,6 +299,27 @@ const getPreviewText = () => {
   }
 
   return lines.join('\n')
+}
+
+// 一键复制所有卡密
+const copyAllKeys = async () => {
+  const content = props.apiKeys
+    .map((key) => key.apiKey || key.key || '')
+    .join('\n')
+
+  try {
+    await navigator.clipboard.writeText(content)
+    showToast(`已复制 ${props.apiKeys.length} 个 API Key 到剪贴板`, 'success')
+  } catch (error) {
+    // 降级方案
+    const textarea = document.createElement('textarea')
+    textarea.value = content
+    document.body.appendChild(textarea)
+    textarea.select()
+    document.execCommand('copy')
+    document.body.removeChild(textarea)
+    showToast(`已复制 ${props.apiKeys.length} 个 API Key 到剪贴板`, 'success')
+  }
 }
 
 // 下载 API Keys

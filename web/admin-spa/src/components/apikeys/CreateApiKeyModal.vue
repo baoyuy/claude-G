@@ -25,6 +25,53 @@
           class="modal-scroll-content custom-scrollbar flex-1 space-y-4"
           @submit.prevent="createApiKey"
         >
+          <!-- 预设模板选择 -->
+          <div
+            class="rounded-lg border border-purple-200 bg-gradient-to-r from-purple-50 to-pink-50 p-3 dark:border-purple-700 dark:from-purple-900/20 dark:to-pink-900/20 sm:p-4"
+          >
+            <div class="mb-3 flex items-center justify-between">
+              <div class="flex items-center gap-2">
+                <i class="fas fa-magic text-purple-500"></i>
+                <label class="text-xs font-semibold text-gray-700 dark:text-gray-300 sm:text-sm">
+                  快速预设
+                </label>
+              </div>
+              <button
+                v-if="presets.length > 0"
+                class="text-xs text-purple-600 hover:text-purple-800 dark:text-purple-400"
+                type="button"
+                @click="showPresetManager = true"
+              >
+                <i class="fas fa-cog mr-1"></i>管理预设
+              </button>
+            </div>
+            <div class="flex flex-wrap gap-2">
+              <button
+                v-for="preset in presets"
+                :key="preset.id"
+                class="inline-flex items-center gap-1.5 rounded-lg border border-purple-300 bg-white px-3 py-1.5 text-xs font-medium text-purple-700 transition-all hover:bg-purple-100 hover:shadow-sm dark:border-pe-600 dark:bg-purple-900/30 dark:text-purple-300 dark:hover:bg-purple-900/50"
+                type="button"
+                @click="applyPreset(preset)"
+              >
+                <i class="fas fa-bolt"></i>
+                {{ preset.name }}
+                <span class="text-purple-500">({{ preset.batchCount }}个)</span>
+              </button>
+              <button
+                class="inline-flex items-center gap-1.5 rounded-lg border border-dashed border-gray-300 bg-gray-50 px-3 py-1.5 text-xs font-medium text-gray-600 transition-all hover:border-purple-400 hover:bg-purple-50 hover:text-purple-600 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-400 dark:hover:border-purple-500 dark:hover:text-purple-400"
+                type="button"
+                @click="saveCurrentAsPreset"
+              >
+                <i class="fas fa-plus"></i>
+                保存当前为预设
+              </button>
+            </div>
+            <p v-if="presets.length === 0" class="mt-2 text-xs text-gray-500 dark:text-gray-400">
+              <i class="fas fa-info-circle mr-1"></i>
+              还没有预设，填写配置后点击"保存当前为预设"可快速复用
+            </p>
+          </div>
+
           <!-- 创建类型选择 -->
           <div
             class="rounded-lg border border-blue-200 bg-gradient-to-r from-blue-50 to-indigo-50 p-3 dark:border-blue-700 dark:from-blue-900/20 dark:to-indigo-900/20 sm:p-4"
@@ -1081,6 +1128,96 @@ const form = reactive({
   tags: []
 })
 
+// ==================== 预设模板功能 ====================
+const PRESETS_STORAGE_KEY = 'claude-g-apikey-presets'
+const presets = ref([])
+const showPresetManager = ref(false)
+
+// 加载预设
+const loadPresets = () => {
+  try {
+    const saved = localStorage.getItem(PRESETS_STORAGE_KEY)
+    if (saved) {
+      presets.value = JSON.parse(saved)
+    }
+  } catch (e) {
+    console.error('加载预设失败:', e)
+  }
+}
+
+// 保存预设到localStorage
+const savePresetsToStorage = () => {
+  try {
+    localStorage.setItem(PRESETS_STORAGE_KEY, JSON.stringify(presets.value))
+  } catch (e) {
+    console.error('保存预设失败:', e)
+  }
+}
+
+// 应用预设
+const applyPreset = (preset) => {
+  form.createType = 'batch'
+  form.batchCount = preset.batchCount || 10
+  form.name = preset.baseName || ''
+  form.rateLimitWindow = preset.rateLimitWindow || ''
+  form.rateLimitRequests = preset.rateLimitRequests || ''
+  form.rateLimitCost = preset.rateLimitCost || ''
+  form.concurrencyLimit = preset.concurrencyLimit || ''
+  form.dailyCostLimit = preset.dailyCostLimit || ''
+  form.totalCostLimit = preset.totalCostLimit || ''
+  form.weeklyOpusCostLimit = preset.weeklyOpusCostLimit || ''
+  form.expireDuration = preset.expireDuration || ''
+  form.expirationMode = preset.expirationMode || 'fixed'
+  form.activationDays = preset.activationDays || 30
+  form.activationUnit = preset.activationUnit || 'days'
+  form.permissions = preset.permissions || []
+  form.tags = preset.tags || []
+
+  showToast(`已应用预设: ${preset.name}`, 'success')
+}
+
+// 保存当前配置为预设
+const saveCurrentAsPreset = async () => {
+  const presetName = prompt('请输入预设名称:', form.name || '我的预设')
+  if (!presetName) return
+
+  const newPreset = {
+    id: Date.now().toString(),
+    name: presetName,
+    baseName: form.name,
+    batchCount: form.batchCount || 10,
+    rateLimitWindow: form.rateLimitWindow,
+    rateLimitRequests: form.rateLimitRequests,
+    rateLimitCost: form.rateLimitCost,
+    concurrencyLimit: form.concurrencyLimit,
+    dailyCostLimit: form.dailyCostLimit,
+    totalCostLimit: form.totalCostLimit,
+    weeklyOpusCostLimit: form.weeklyOpusCostLimit,
+    expireDuration: form.expireDuration,
+    expirationMode: form.expirationMode,
+    activationDays: form.activationDays,
+    activationUnit: form.activationUnit,
+    permissions: [...form.permissions],
+    tags: [...form.tags],
+    createdAt: new Date().toISOString()
+  }
+
+  presets.value.push(newPreset)
+  savePresetsToStorage()
+  showToast(`预设 "${presetName}" 已保存`, 'success')
+}
+
+// 删除预设
+const deletePreset = (presetId) => {
+  const index = presets.value.findIndex(p => p.id === presetId)
+  if (index > -1) {
+    const preset = presets.value[index]
+    presets.value.splice(index, 1)
+    savePresetsToStorage()
+    showToast(`预设 "${preset.name}" 已删除`, 'success')
+  }
+}
+
 // 更新权限（数组格式，空数组=全部服务）
 const updatePermissions = () => {
   // form.permissions 已经是数组，由 v-model 自动管理
@@ -1088,6 +1225,9 @@ const updatePermissions = () => {
 
 // 加载支持的客户端和已存在的标签
 onMounted(async () => {
+  // 加载预设
+  loadPresets()
+
   supportedClients.value = await clientsStore.loadSupportedClients()
   availableTags.value = await apiKeysStore.fetchTags()
   // 初始化账号数据
