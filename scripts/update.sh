@@ -64,17 +64,29 @@ fi
 
 info "发现新版本: $CURRENT_VERSION -> $NEW_VERSION"
 
-# 重启容器（使用新代码，不重新构建镜像）
-info "重启服务..."
+# 检测Docker Compose命令
 if docker compose version &> /dev/null; then
-    docker compose up -d --force-recreate
+    DC="docker compose"
 else
-    docker-compose up -d --force-recreate
+    DC="docker-compose"
 fi
 
-# 等待服务启动（缩短等待时间）
+# 构建前端（在容器内执行）
+info "构建前端资源..."
+$DC exec -T claude-relay npm run build:web 2>/dev/null || {
+    warn "容器内构建失败，尝试重启后构建..."
+    $DC up -d --force-recreate
+    sleep 5
+    $DC exec -T claude-relay npm run build:web 2>/dev/null || warn "前端构建跳过"
+}
+
+# 重启服务
+info "重启服务..."
+$DC restart
+
+# 等待服务启动
 info "等待服务启动..."
-for i in {1..6}; do
+for i in {1..10}; do
     if curl -s http://localhost:3000/health > /dev/null 2>&1; then
         success "服务重启成功！"
         break
