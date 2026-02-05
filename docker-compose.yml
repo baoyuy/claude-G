@@ -20,6 +20,7 @@ services:
       - ./config:/app/config
       - ./cli:/app/cli
       - ./VERSION:/app/VERSION
+      - ./web/admin-spa/dist:/app/web/admin-spa/dist
     environment:
       # 🌐 服务器配置
       - NODE_ENV=production
