@@ -2,6 +2,7 @@
 
 # claude-G 一键更新脚本
 # 用法: curl -fsSL https://raw.githubusercontent.com/baoyuy/claude-G/main/scripts/update.sh | bash
+# 强制更新: curl -fsSL https://raw.githubusercontent.com/baoyuy/claude-G/main/scripts/update.sh | bash -s -- --force
 
 set -e
 
@@ -16,6 +17,16 @@ info() { echo -e "${BLUE}[INFO]${NC} $1"; }
 success() { echo -e "${GREEN}[SUCCESS]${NC} $1"; }
 warn() { echo -e "${YELLOW}[WARN]${NC} $1"; }
 error() { echo -e "${RED}[ERROR]${NC} $1"; exit 1; }
+
+# 解析参数
+FORCE_UPDATE=false
+for arg in "$@"; do
+    case $arg in
+        --force|-f)
+            FORCE_UPDATE=true
+            ;;
+    esac
+done
 
 echo ""
 echo -e "${GREEN}╔════════════════════════════════════════════════════════════╗${NC}"
@@ -44,25 +55,45 @@ if [ ! -d ".git" ]; then
     error "当前目录不是 git 仓库，无法更新"
 fi
 
-# 获取当前版本
+# 获取当前版本和commit
 CURRENT_VERSION=$(cat VERSION 2>/dev/null || echo "unknown")
-info "当前版本: $CURRENT_VERSION"
+CURRENT_COMMIT=$(git rev-parse --short HEAD 2>/dev/null || echo "unknown")
+info "当前版本: $CURRENT_VERSION (commit: $CURRENT_COMMIT)"
 
 # 拉取最新代码
-info "拉取最新代码..."
+info "检查远程更新..."
 git fetch origin main
-git reset --hard origin/main
 
-# 获取新版本
-NEW_VERSION=$(cat VERSION 2>/dev/null || echo "unknown")
+# 获取远程最新commit
+REMOTE_COMMIT=$(git rev-parse --short origin/main 2>/dev/null || echo "unknown")
 
-if [ "$CURRENT_VERSION" = "$NEW_VERSION" ]; then
-    success "当前已是最新版本 ($CURRENT_VERSION)"
+# 比较commit判断是否有更新
+if [ "$CURRENT_COMMIT" = "$REMOTE_COMMIT" ] && [ "$FORCE_UPDATE" = false ]; then
+    success "当前已是最新版本 ($CURRENT_VERSION, commit: $CURRENT_COMMIT)"
+    echo ""
+    echo -e "  ${YELLOW}提示:${NC} 如需强制重启服务，请使用 --force 参数"
     echo ""
     exit 0
 fi
 
-info "发现新版本: $CURRENT_VERSION -> $NEW_VERSION"
+# 有更新或强制更新
+if [ "$CURRENT_COMMIT" != "$REMOTE_COMMIT" ]; then
+    info "发现新提交: $CURRENT_COMMIT -> $REMOTE_COMMIT"
+else
+    info "强制更新模式"
+fi
+
+# 拉取最新代码
+info "拉取最新代码..."
+git reset --hard origin/main
+
+# 获取新版本
+NEW_VERSION=$(cat VERSION 2>/dev/null || echo "unknown")
+NEW_COMMIT=$(git rev-parse --short HEAD 2>/dev/null || echo "unknown")
+
+if [ "$CURRENT_VERSION" != "$NEW_VERSION" ]; then
+    info "版本更新: $CURRENT_VERSION -> $NEW_VERSION"
+fi
 
 # 重启服务
 info "重启服务..."
@@ -74,13 +105,20 @@ fi
 
 # 等待服务启动
 info "等待服务启动..."
-for i in {1..10}; do
+SERVICE_OK=false
+for i in {1..15}; do
     if curl -s http://localhost:3000/health > /dev/null 2>&1; then
-        success "服务重启成功！"
+        SERVICE_OK=true
         break
     fi
     sleep 1
 done
+
+if [ "$SERVICE_OK" = true ]; then
+    success "服务重启成功！"
+else
+    warn "服务启动超时，请手动检查日志"
+fi
 
 echo ""
 echo -e "${GREEN}╔════════════════════════════════════════════════════════════╗${NC}"
@@ -88,5 +126,6 @@ echo -e "${GREEN}║                    更新完成！                         
 echo -e "${GREEN}╚════════════════════════════════════════════════════════════╝${NC}"
 echo ""
 echo -e "  ${BLUE}版本:${NC} $CURRENT_VERSION -> $NEW_VERSION"
+echo -e "  ${BLUE}提交:${NC} $CURRENT_COMMIT -> $NEW_COMMIT"
 echo -e "  ${BLUE}查看日志:${NC} cd $INSTALL_DIR && docker compose logs -f"
 echo ""
