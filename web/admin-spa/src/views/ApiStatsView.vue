@@ -86,8 +86,8 @@
             v-if="oemSettings.purchaseKeyUrl"
             class="tab-pill-button purchase-key-button"
             :href="oemSettings.purchaseKeyUrl"
-            target="_blank"
             rel="noopener noreferrer"
+            target="_blank"
           >
             <i class="fas fa-shopping-cart mr-1 md:mr-2" />
             <span class="text-sm md:text-base">购买密钥</span>

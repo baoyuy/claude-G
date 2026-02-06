@@ -67,10 +67,19 @@ router.delete('/claude-code-headers/:accountId', authenticateAdmin, async (req, 
 
 // ==================== 系统更新检查 ====================
 
+const { exec } = require('child_process')
+const util = require('util')
+const execPromise = util.promisify(exec)
+
+// GitHub 仓库配置
+const GITHUB_REPO = 'baoyuy/claude-G'
+const GITHUB_BRANCH = 'main'
+
 // 版本比较函数
 function compareVersions(current, latest) {
   const parseVersion = (v) => {
-    const parts = v.split('.').map(Number)
+    const clean = String(v).replace(/^v/, '')
+    const parts = clean.split('.').map(Number)
     return {
       major: parts[0] || 0,
       minor: parts[1] || 0,
@@ -90,9 +99,93 @@ function compareVersions(current, latest) {
   return currentV.patch - latestV.patch
 }
 
+// 检查是否在 Git 仓库中
+async function isGitRepo(cwd) {
+  try {
+    await execPromise('git rev-parse --git-dir', { cwd, timeout: 5000 })
+    return true
+  } catch {
+    return false
+  }
+}
+
+// 获取本地 Git commit hash
+async function getLocalCommitHash(cwd) {
+  try {
+    const { stdout } = await execPromise('git rev-parse HEAD', { cwd, timeout: 5000 })
+    return stdout.trim()
+  } catch {
+    return null
+  }
+}
+
+// 获取远程最新 commit hash（通过 GitHub API）
+async function getRemoteCommitHash() {
+  try {
+    const response = await axios.get(`https://api.github.com/repos/${GITHUB_REPO}/commits/${GITHUB_BRANCH}`, {
+      headers: {
+        Accept: 'application/vnd.github.v3+json',
+        'User-Agent': 'Claude-Relay-Service'
+      },
+      timeout: 15000
+    })
+    return {
+      sha: response.data.sha,
+      message: response.data.commit.message,
+      date: response.data.commit.committer.date,
+      author: response.data.commit.author.name
+    }
+  } catch (error) {
+    logger.warn('⚠️ Failed to get remote commit from GitHub API:', error.message)
+    return null
+  }
+}
+
+// 获取远程最新 commit（通过 git fetch）
+async function getRemoteCommitViaGit(cwd) {
+  try {
+    // 先 fetch 远程更新
+    await execPromise(`git fetch origin ${GITHUB_BRANCH}`, { cwd, timeout: 30000 })
+    // 获取远程分支的最新 commit
+    const { stdout } = await execPromise(`git rev-parse origin/${GITHUB_BRANCH}`, { cwd, timeout: 5000 })
+    return stdout.trim()
+  } catch (error) {
+    logger.warn('⚠️ Failed to fetch remote commit via git:', error.message)
+    return null
+  }
+}
+
+// 获取最近的 commits 列表（用于显示更新内容）
+async function getRecentCommits(since) {
+  try {
+    const response = await axios.get(`https://api.github.com/repos/${GITHUB_REPO}/commits`, {
+      params: {
+        sha: GITHUB_BRANCH,
+        since: since,
+        per_page: 20
+      },
+      headers: {
+        Accept: 'application/vnd.github.v3+json',
+        'User-Agent': 'Claude-Relay-Service'
+      },
+      timeout: 15000
+    })
+    return response.data.map((c) => ({
+      sha: c.sha.substring(0, 7),
+      message: c.commit.message.split('\n')[0],
+      date: c.commit.committer.date,
+      author: c.commit.author.name
+    }))
+  } catch {
+    return []
+  }
+}
+
 router.get('/check-updates', authenticateAdmin, async (req, res) => {
-  // 读取当前版本
-  const versionPath = path.join(__dirname, '../../../VERSION')
+  const projectRoot = path.join(__dirname, '../../..')
+  const versionPath = path.join(projectRoot, 'VERSION')
+
+  // 读取当前版本号
   let currentVersion = '1.0.0'
   try {
     currentVersion = fs.readFileSync(versionPath, 'utf8').trim()
@@ -101,152 +194,146 @@ router.get('/check-updates', authenticateAdmin, async (req, res) => {
   }
 
   try {
-    // 从缓存获取
-    const cacheKey = 'version_check_cache'
-    const cached = await redis.getClient().get(cacheKey)
-
-    if (cached && !req.query.force) {
-      const cachedData = JSON.parse(cached)
-      const cacheAge = Date.now() - cachedData.timestamp
-
-      // 缓存有效期1小时
-      if (cacheAge < 3600000) {
-        // 实时计算 hasUpdate，不使用缓存的值
-        const hasUpdate = compareVersions(currentVersion, cachedData.latest) < 0
-
-        return res.json({
-          success: true,
-          data: {
-            current: currentVersion,
-            latest: cachedData.latest,
-            hasUpdate, // 实时计算，不用缓存
-            releaseInfo: cachedData.releaseInfo,
-            cached: true
-          }
-        })
+    // 检查缓存（除非强制刷新）
+    const cacheKey = 'version_check_cache_v2'
+    if (!req.query.force) {
+      const cached = await redis.getClient().get(cacheKey)
+      if (cached) {
+        const cachedData = JSON.parse(cached)
+        const cacheAge = Date.now() - cachedData.timestamp
+        // 缓存有效期 10 分钟
+        if (cacheAge < 600000) {
+          return res.json({
+            success: true,
+            data: {
+              ...cachedData.data,
+              current: currentVersion,
+              cached: true
+            }
+          })
+        }
       }
     }
 
-    // 请求 GitHub API
-    const githubRepo = 'baoyuy/claude-G'
-    const response = await axios.get(`https://api.github.com/repos/${githubRepo}/releases/latest`, {
-      headers: {
-        Accept: 'application/vnd.github.v3+json',
-        'User-Agent': 'Claude-Relay-Service'
-      },
-      timeout: 10000
-    })
+    // 检查是否在 Git 仓库中
+    const isGit = await isGitRepo(projectRoot)
+    const isDocker = fs.existsSync('/.dockerenv')
 
-    const release = response.data
-    const latestVersion = release.tag_name.replace(/^v/, '')
+    let localCommit = null
+    let remoteCommit = null
+    let hasUpdate = false
+    let updateMethod = 'unknown'
+    let recentCommits = []
 
-    // 比较版本
-    const hasUpdate = compareVersions(currentVersion, latestVersion) < 0
+    if (isGit && !isDocker) {
+      // Git 模式：通过 git 命令检查
+      updateMethod = 'git'
+      localCommit = await getLocalCommitHash(projectRoot)
 
-    const releaseInfo = {
-      name: release.name,
-      body: release.body,
-      publishedAt: release.published_at,
-      htmlUrl: release.html_url
+      // 优先使用 git fetch 获取远程 commit
+      const remoteCommitHash = await getRemoteCommitViaGit(projectRoot)
+      if (remoteCommitHash) {
+        remoteCommit = { sha: remoteCommitHash }
+      } else {
+        // 回退到 GitHub API
+        remoteCommit = await getRemoteCommitHash()
+      }
+
+      if (localCommit && remoteCommit) {
+        hasUpdate = localCommit !== remoteCommit.sha
+      }
+    } else {
+      // 非 Git 模式（Docker 或直接下载）：通过 GitHub API 检查
+      updateMethod = isDocker ? 'docker' : 'tarball'
+      remoteCommit = await getRemoteCommitHash()
+
+      // 尝试读取本地记录的 commit hash
+      const commitFilePath = path.join(projectRoot, '.git_commit')
+      try {
+        localCommit = fs.readFileSync(commitFilePath, 'utf8').trim()
+      } catch {
+        localCommit = null
+      }
+
+      if (remoteCommit) {
+        hasUpdate = !localCommit || localCommit !== remoteCommit.sha
+      }
     }
 
-    // 缓存结果（不缓存 hasUpdate，因为它应该实时计算）
+    // 如果有更新，获取最近的 commits
+    if (hasUpdate && localCommit) {
+      // 获取本地 commit 的时间
+      try {
+        const localCommitInfo = await axios.get(`https://api.github.com/repos/${GITHUB_REPO}/commits/${localCommit}`, {
+          headers: {
+            Accept: 'application/vnd.github.v3+json',
+            'User-Agent': 'Claude-Relay-Service'
+          },
+          timeout: 10000
+        })
+        const sinceDate = localCommitInfo.data.commit.committer.date
+        recentCommits = await getRecentCommits(sinceDate)
+        // 过滤掉本地已有的 commit
+        recentCommits = recentCommits.filter((c) => !localCommit.startsWith(c.sha))
+      } catch {
+        // 忽略错误
+      }
+    }
+
+    const responseData = {
+      current: currentVersion,
+      latest: remoteCommit ? currentVersion : currentVersion, // 版本号保持不变，用 commit 判断
+      hasUpdate,
+      updateMethod,
+      localCommit: localCommit ? localCommit.substring(0, 7) : null,
+      remoteCommit: remoteCommit ? remoteCommit.sha.substring(0, 7) : null,
+      isDocker,
+      isGitRepo: isGit,
+      releaseInfo: {
+        name: hasUpdate ? '有新的更新可用' : '当前已是最新版本',
+        body: hasUpdate
+          ? recentCommits.length > 0
+            ? `最近 ${recentCommits.length} 个更新:\n${recentCommits.map((c) => `• ${c.sha} ${c.message}`).join('\n')}`
+            : `远程有新的提交 (${remoteCommit?.sha?.substring(0, 7)})`
+          : '没有新的更新',
+        publishedAt: remoteCommit?.date || new Date().toISOString(),
+        htmlUrl: `https://github.com/${GITHUB_REPO}/commits/${GITHUB_BRANCH}`
+      },
+      recentCommits
+    }
+
+    // 缓存结果
     await redis.getClient().set(
       cacheKey,
       JSON.stringify({
-        latest: latestVersion,
-        releaseInfo,
+        data: responseData,
         timestamp: Date.now()
       }),
       'EX',
-      3600
-    ) // 1小时过期
+      600
+    )
 
     return res.json({
       success: true,
-      data: {
-        current: currentVersion,
-        latest: latestVersion,
-        hasUpdate,
-        releaseInfo,
-        cached: false
-      }
+      data: responseData
     })
   } catch (error) {
-    // 改进错误日志记录
-    const errorDetails = {
-      message: error.message || 'Unknown error',
-      code: error.code,
-      response: error.response
-        ? {
-            status: error.response.status,
-            statusText: error.response.statusText,
-            data: error.response.data
-          }
-        : null,
-      request: error.request ? 'Request was made but no response received' : null
-    }
+    logger.error('❌ Failed to check for updates:', error.message)
 
-    logger.error('❌ Failed to check for updates:', errorDetails.message)
-
-    // 处理 404 错误 - 仓库或版本不存在
-    if (error.response && error.response.status === 404) {
-      return res.json({
-        success: true,
-        data: {
-          current: currentVersion,
-          latest: currentVersion,
-          hasUpdate: false,
-          releaseInfo: {
-            name: 'No releases found',
-            body: 'The GitHub repository has no releases yet.',
-            publishedAt: new Date().toISOString(),
-            htmlUrl: '#'
-          },
-          warning: 'GitHub repository has no releases'
-        }
-      })
-    }
-
-    // 如果是网络错误，尝试返回缓存的数据
-    if (error.code === 'ECONNREFUSED' || error.code === 'ETIMEDOUT' || error.code === 'ENOTFOUND') {
-      const cacheKey = 'version_check_cache'
-      const cached = await redis.getClient().get(cacheKey)
-
-      if (cached) {
-        const cachedData = JSON.parse(cached)
-        // 实时计算 hasUpdate
-        const hasUpdate = compareVersions(currentVersion, cachedData.latest) < 0
-
-        return res.json({
-          success: true,
-          data: {
-            current: currentVersion,
-            latest: cachedData.latest,
-            hasUpdate, // 实时计算
-            releaseInfo: cachedData.releaseInfo,
-            cached: true,
-            warning: 'Using cached data due to network error'
-          }
-        })
-      }
-    }
-
-    // 其他错误返回当前版本信息
     return res.json({
       success: true,
       data: {
         current: currentVersion,
         latest: currentVersion,
         hasUpdate: false,
-        releaseInfo: {
-          name: 'Update check failed',
-          body: `Unable to check for updates: ${error.message || 'Unknown error'}`,
-          publishedAt: new Date().toISOString(),
-          htmlUrl: '#'
-        },
         error: true,
-        warning: error.message || 'Failed to check for updates'
+        warning: error.message || 'Failed to check for updates',
+        releaseInfo: {
+          name: '检查更新失败',
+          body: `无法检查更新: ${error.message}`,
+          publishedAt: new Date().toISOString(),
+          htmlUrl: `https://github.com/${GITHUB_REPO}`
+        }
       }
     })
   }
@@ -412,81 +499,195 @@ router.post('/claude-code-version/clear', authenticateAdmin, async (req, res) =>
 
 // ==================== 系统更新执行 ====================
 
-const { exec } = require('child_process')
-const util = require('util')
-const execPromise = util.promisify(exec)
-
-// 执行系统更新
+// 执行系统更新（改进版：支持 stash、fetch、reset 模式）
 router.post('/perform-update', authenticateAdmin, async (req, res) => {
+  const projectRoot = path.join(__dirname, '../../..')
+
   try {
     logger.info('🔄 Starting system update...')
 
-    // 检查是否在Docker环境中
+    // 检查是否在 Docker 环境中
     const isDocker = fs.existsSync('/.dockerenv')
 
     if (isDocker) {
-      // Docker环境：需要通过特殊方式更新
-      // 这里返回更新指令，让用户在宿主机执行
+      // Docker 环境：返回更新指令
       return res.json({
         success: true,
         isDocker: true,
-        message: 'Docker环境检测到，请在宿主机执行以下命令更新：',
-        commands: [
-          'cd /path/to/claude-G',
-          'docker-compose pull',
-          'docker-compose up -d'
-        ],
+        message: 'Docker 环境检测到，请在宿主机执行以下命令更新：',
+        commands: ['cd /path/to/claude-G', 'docker-compose pull', 'docker-compose up -d'],
         hint: '或者使用一键更新脚本: curl -fsSL https://raw.githubusercontent.com/baoyuy/claude-G/main/scripts/update.sh | bash'
       })
     }
 
-    // 非Docker环境：直接执行git pull
-    const projectRoot = path.join(__dirname, '../../..')
+    // 检查是否在 Git 仓库中
+    const isGit = await isGitRepo(projectRoot)
+    if (!isGit) {
+      return res.status(400).json({
+        success: false,
+        error: '当前目录不是 Git 仓库',
+        message: '请使用一键部署脚本重新安装，或手动执行 git clone'
+      })
+    }
 
-    // 执行git pull
-    const { stdout: pullOutput, stderr: pullError } = await execPromise('git pull origin main', {
-      cwd: projectRoot,
-      timeout: 60000
-    })
+    const updateSteps = []
 
-    logger.info('📥 Git pull completed:', pullOutput)
+    // Step 1: 检查并 stash 本地修改
+    logger.info('📋 Checking for local changes...')
+    try {
+      const { stdout: statusOutput } = await execPromise('git status --porcelain', {
+        cwd: projectRoot,
+        timeout: 10000
+      })
 
-    // 检查是否有更新
-    if (pullOutput.includes('Already up to date')) {
+      if (statusOutput.trim()) {
+        logger.info('📦 Stashing local changes...')
+        await execPromise('git stash push -m "Auto stash before update"', {
+          cwd: projectRoot,
+          timeout: 30000
+        })
+        updateSteps.push('已暂存本地修改')
+      }
+    } catch (stashErr) {
+      logger.warn('⚠️ Stash warning:', stashErr.message)
+    }
+
+    // Step 2: Fetch 远程更新
+    logger.info('📥 Fetching remote updates...')
+    try {
+      await execPromise(`git fetch origin ${GITHUB_BRANCH}`, {
+        cwd: projectRoot,
+        timeout: 60000
+      })
+      updateSteps.push('已获取远程更新')
+    } catch (fetchErr) {
+      logger.error('❌ Fetch failed:', fetchErr.message)
+      return res.status(500).json({
+        success: false,
+        error: 'Fetch failed',
+        message: `无法获取远程更新: ${fetchErr.message}`
+      })
+    }
+
+    // Step 3: 获取本地和远程 commit
+    const localCommit = await getLocalCommitHash(projectRoot)
+    let remoteCommit = null
+    try {
+      const { stdout } = await execPromise(`git rev-parse origin/${GITHUB_BRANCH}`, {
+        cwd: projectRoot,
+        timeout: 5000
+      })
+      remoteCommit = stdout.trim()
+    } catch {
+      remoteCommit = null
+    }
+
+    if (!remoteCommit) {
+      return res.status(500).json({
+        success: false,
+        error: '无法获取远程版本信息'
+      })
+    }
+
+    // 检查是否需要更新
+    if (localCommit === remoteCommit) {
       return res.json({
         success: true,
         message: '当前已是最新版本',
         updated: false,
-        output: pullOutput
+        localCommit: localCommit.substring(0, 7),
+        remoteCommit: remoteCommit.substring(0, 7)
       })
     }
 
-    // 安装依赖
-    logger.info('📦 Installing dependencies...')
-    const { stdout: npmOutput } = await execPromise('npm install', {
-      cwd: projectRoot,
-      timeout: 120000
-    })
-
-    // 构建前端
-    logger.info('🔨 Building frontend...')
+    // Step 4: 执行更新（使用 reset --hard 确保完全同步）
+    logger.info(`🔄 Updating from ${localCommit.substring(0, 7)} to ${remoteCommit.substring(0, 7)}...`)
     try {
-      await execPromise('npm run build:web', {
+      await execPromise(`git reset --hard origin/${GITHUB_BRANCH}`, {
         cwd: projectRoot,
-        timeout: 180000
+        timeout: 60000
       })
-    } catch (buildErr) {
-      logger.warn('⚠️ Frontend build warning:', buildErr.message)
+      updateSteps.push(`已更新到 ${remoteCommit.substring(0, 7)}`)
+    } catch (resetErr) {
+      logger.error('❌ Reset failed:', resetErr.message)
+      return res.status(500).json({
+        success: false,
+        error: 'Reset failed',
+        message: `更新失败: ${resetErr.message}`
+      })
     }
+
+    // Step 5: 检查 package.json 是否有变化，决定是否需要 npm install
+    let needsNpmInstall = false
+    try {
+      const { stdout: diffOutput } = await execPromise(`git diff ${localCommit}..${remoteCommit} --name-only`, {
+        cwd: projectRoot,
+        timeout: 10000
+      })
+      needsNpmInstall = diffOutput.includes('package.json') || diffOutput.includes('package-lock.json')
+    } catch {
+      // 保守起见，如果检查失败就执行 npm install
+      needsNpmInstall = true
+    }
+
+    if (needsNpmInstall) {
+      logger.info('📦 Installing dependencies...')
+      try {
+        await execPromise('npm install --production=false', {
+          cwd: projectRoot,
+          timeout: 180000
+        })
+        updateSteps.push('已更新依赖')
+      } catch (npmErr) {
+        logger.warn('⚠️ npm install warning:', npmErr.message)
+        updateSteps.push('依赖更新可能不完整，建议手动执行 npm install')
+      }
+    }
+
+    // Step 6: 构建前端（如果有变化）
+    let needsFrontendBuild = false
+    try {
+      const { stdout: webDiffOutput } = await execPromise(`git diff ${localCommit}..${remoteCommit} --name-only -- web/`, {
+        cwd: projectRoot,
+        timeout: 10000
+      })
+      needsFrontendBuild = webDiffOutput.trim().length > 0
+    } catch {
+      needsFrontendBuild = true
+    }
+
+    if (needsFrontendBuild) {
+      logger.info('🔨 Building frontend...')
+      try {
+        await execPromise('npm run build:web', {
+          cwd: projectRoot,
+          timeout: 300000
+        })
+        updateSteps.push('已重新构建前端')
+      } catch (buildErr) {
+        logger.warn('⚠️ Frontend build warning:', buildErr.message)
+        updateSteps.push('前端构建可能失败，建议手动执行 npm run build:web')
+      }
+    }
+
+    // 清除更新检查缓存
+    try {
+      await redis.getClient().del('version_check_cache_v2')
+    } catch {
+      // ignore
+    }
+
+    logger.info('✅ System update completed successfully')
 
     return res.json({
       success: true,
       message: '更新完成，请重启服务以生效',
       updated: true,
-      output: pullOutput,
+      previousCommit: localCommit.substring(0, 7),
+      currentCommit: remoteCommit.substring(0, 7),
+      steps: updateSteps,
       needRestart: true
     })
-
   } catch (error) {
     logger.error('❌ System update failed:', error)
     return res.status(500).json({

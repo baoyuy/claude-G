@@ -1919,11 +1919,18 @@
             <div class="flex items-center">
               <i class="fas fa-arrow-circle-up mr-2 text-xl text-green-500"></i>
               <div>
-                <div class="font-semibold text-green-800 dark:text-green-300">
-                  发现新版本: v{{ updateInfo.latest }}
-                </div>
+                <div class="font-semibold text-green-800 dark:text-green-300">发现新版本</div>
                 <div class="text-sm text-green-600 dark:text-green-400">
                   当前版本: v{{ updateInfo.current }}
+                  <span v-if="updateInfo.localCommit" class="ml-2 font-mono"
+                    >({{ updateInfo.localCommit }})</span
+                  >
+                </div>
+                <div
+                  v-if="updateInfo.remoteCommit"
+                  class="text-sm text-green-600 dark:text-green-400"
+                >
+                  最新提交: <span class="font-mono">{{ updateInfo.remoteCommit }}</span>
                 </div>
               </div>
             </div>
@@ -1941,6 +1948,20 @@
                 {{ updateInfo.releaseInfo.body }}
               </div>
             </div>
+            <!-- 更新方式提示 -->
+            <div
+              v-if="updateInfo.updateMethod"
+              class="mt-2 text-xs text-green-600 dark:text-green-500"
+            >
+              更新方式:
+              {{
+                updateInfo.updateMethod === 'git'
+                  ? 'Git 仓库'
+                  : updateInfo.updateMethod === 'docker'
+                    ? 'Docker'
+                    : '手动下载'
+              }}
+            </div>
           </div>
 
           <!-- 已是最新 -->
@@ -1954,8 +1975,18 @@
                 <div class="font-semibold text-blue-800 dark:text-blue-300">当前已是最新版本</div>
                 <div class="text-sm text-blue-600 dark:text-blue-400">
                   版本: v{{ updateInfo.current }}
+                  <span v-if="updateInfo.localCommit" class="ml-2 font-mono"
+                    >({{ updateInfo.localCommit }})</span
+                  >
                 </div>
               </div>
+            </div>
+            <!-- 检查更新警告信息 -->
+            <div
+              v-if="updateInfo.warning"
+              class="mt-2 text-xs text-yellow-600 dark:text-yellow-500"
+            >
+              <i class="fas fa-exclamation-triangle mr-1"></i>{{ updateInfo.warning }}
             </div>
           </div>
 
@@ -2218,12 +2249,22 @@ const performUpdate = async () => {
         dockerUpdateHint.value = res.hint
         showToast('Docker环境请在宿主机执行更新命令', 'warning')
       } else if (res.updated) {
-        showToast('更新完成，请重启服务以生效', 'success')
+        // 显示更新步骤
+        let message = '更新完成'
+        if (res.previousCommit && res.currentCommit) {
+          message += ` (${res.previousCommit} → ${res.currentCommit})`
+        }
+        if (res.steps && res.steps.length > 0) {
+          message += '\n' + res.steps.join('\n')
+        }
+        showToast(message, 'success')
+        // 刷新更新信息
+        await checkForUpdates(true)
       } else {
         showToast(res.message || '当前已是最新版本', 'info')
       }
     } else {
-      showToast('更新失败: ' + (res.message || '未知错误'), 'error')
+      showToast('更新失败: ' + (res.message || res.error || '未知错误'), 'error')
     }
   } catch (error) {
     console.error('执行更新失败:', error)
