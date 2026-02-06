@@ -1,8 +1,8 @@
 #!/bin/bash
 
 # claude-G 一键更新脚本
-# 用法: curl -fsSL https://raw.githubusercontent.com/baoyuy/claude-G/main/claude-relay-service/scripts/update.sh | bash
-# 强制更新: curl -fsSL https://raw.githubusercontent.com/baoyuy/claude-G/main/claude-relay-service/scripts/update.sh | bash -s -- --force
+# 用法: curl -fsSL https://raw.githubusercontent.com/baoyuy/claude-G/main/scripts/update.sh | bash
+# 强制更新: curl -fsSL https://raw.githubusercontent.com/baoyuy/claude-G/main/scripts/update.sh | bash -s -- --force
 
 set -e
 

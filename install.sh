@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # claude-G 一键安装脚本
-# 用法: curl -fsSL https://raw.githubusercontent.com/baoyuy/claude-G/main/claude-relay-service/install.sh | bash
+# 用法: curl -fsSL https://raw.githubusercontent.com/baoyuy/claude-G/main/install.sh | bash
 
 set -e
 
@@ -188,5 +188,5 @@ echo -e "  ${YELLOW}常用命令:${NC}"
 echo -e "  查看日志: cd ${INSTALL_DIR}/claude-relay-service && docker compose logs -f"
 echo -e "  重启服务: cd ${INSTALL_DIR}/claude-relay-service && docker compose restart"
 echo -e "  停止服务: cd ${INSTALL_DIR}/claude-relay-service && docker compose down"
-echo -e "  更新服务: curl -fsSL https://raw.githubusercontent.com/baoyuy/claude-G/main/claude-relay-service/scripts/update.sh | bash"
+echo -e "  更新服务: curl -fsSL https://raw.githubusercontent.com/baoyuy/claude-G/main/scripts/update.sh | bash"
 echo ""
