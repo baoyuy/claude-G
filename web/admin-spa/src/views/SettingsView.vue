@@ -280,6 +280,38 @@
                   </td>
                 </tr>
 
+                <!-- 购买密钥链接 -->
+                <tr class="border-b border-gray-100 dark:border-gray-700">
+                  <td class="w-48 whitespace-nowrap px-6 py-4">
+                    <div class="flex items-center">
+                      <div
+                        class="mr-3 flex h-8 w-8 items-center justify-center rounded-lg bg-gradient-to-br from-yellow-500 to-amber-600"
+                      >
+                        <i class="fas fa-shopping-cart text-xs text-white" />
+                      </div>
+                      <div>
+                        <div class="text-sm font-semibold text-gray-900 dark:text-gray-100">
+                          购买密钥
+                        </div>
+                        <div class="text-xs text-gray-500 dark:text-gray-400">首页购买按钮</div>
+                      </div>
+                    </div>
+                  </td>
+                  <td class="px-6 py-4">
+                    <div>
+                      <input
+                        v-model="oemSettings.purchaseKeyUrl"
+                        class="form-input w-full max-w-md dark:border-gray-600 dark:bg-gray-700 dark:text-gray-200"
+                        placeholder="https://example.com/buy"
+                        type="url"
+                      />
+                      <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                        设置后，首页导航栏将显示"购买密钥"按钮，点击跳转到此链接。留空则不显示按钮。
+                      </p>
+                    </div>
+                  </td>
+                </tr>
+
                 <!-- 操作按钮 -->
                 <tr>
                   <td class="px-6 py-6" colspan="2">
@@ -430,6 +462,30 @@
                   隐藏后，用户需要直接访问 /admin/login 页面登录
                 </p>
               </div>
+            </div>
+
+            <!-- 购买密钥卡片 -->
+            <div class="glass-card p-4">
+              <div class="mb-3 flex items-center gap-3">
+                <div
+                  class="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-yellow-500 to-amber-600 text-white shadow-md"
+                >
+                  <i class="fas fa-shopping-cart"></i>
+                </div>
+                <div>
+                  <h3 class="text-base font-semibold text-gray-900 dark:text-gray-100">购买密钥</h3>
+                  <p class="text-sm text-gray-500 dark:text-gray-400">首页购买按钮链接</p>
+                </div>
+              </div>
+              <input
+                v-model="oemSettings.purchaseKeyUrl"
+                class="form-input w-full dark:border-gray-600 dark:bg-gray-700 dark:text-gray-200"
+                placeholder="https://example.com/buy"
+                type="url"
+              />
+              <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                设置后首页显示购买按钮，留空则不显示
+              </p>
             </div>
 
             <!-- 操作按钮卡片 -->
@@ -3160,6 +3216,7 @@ const saveOemSettings = async () => {
       siteIcon: oemSettings.value.siteIcon,
       siteIconData: oemSettings.value.siteIconData,
       showAdminButton: oemSettings.value.showAdminButton,
+      purchaseKeyUrl: oemSettings.value.purchaseKeyUrl,
       apiStatsNotice: oemSettings.value.apiStatsNotice
     }
     const result = await settingsStore.saveOemSettings(settings)

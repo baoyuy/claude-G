@@ -81,6 +81,17 @@
             <i class="fas fa-graduation-cap mr-1 md:mr-2" />
             <span class="text-sm md:text-base">使用教程</span>
           </button>
+          <!-- 购买密钥按钮 -->
+          <a
+            v-if="oemSettings.purchaseKeyUrl"
+            class="tab-pill-button purchase-key-button"
+            :href="oemSettings.purchaseKeyUrl"
+            target="_blank"
+            rel="noopener noreferrer"
+          >
+            <i class="fas fa-shopping-cart mr-1 md:mr-2" />
+            <span class="text-sm md:text-base">购买密钥</span>
+          </a>
         </div>
       </div>
     </div>
@@ -1193,6 +1204,35 @@ watch(apiKey, (newValue) => {
 
 .tab-pill-button i {
   font-size: 0.875rem;
+}
+
+/* 购买密钥按钮特殊样式 */
+.purchase-key-button {
+  background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%) !important;
+  color: white !important;
+  text-decoration: none;
+  box-shadow:
+    0 4px 6px -1px rgba(245, 158, 11, 0.3),
+    0 2px 4px -1px rgba(245, 158, 11, 0.1);
+}
+
+.purchase-key-button:hover {
+  background: linear-gradient(135deg, #d97706 0%, #b45309 100%) !important;
+  color: white !important;
+  transform: translateY(-1px);
+  box-shadow:
+    0 6px 10px -2px rgba(245, 158, 11, 0.4),
+    0 3px 6px -2px rgba(245, 158, 11, 0.2);
+}
+
+:global(html.dark) .purchase-key-button {
+  background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%) !important;
+  color: white !important;
+}
+
+:global(html.dark) .purchase-key-button:hover {
+  background: linear-gradient(135deg, #d97706 0%, #b45309 100%) !important;
+  color: white !important;
 }
 
 /* Tab 内容切换动画 */

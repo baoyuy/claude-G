@@ -23,7 +23,8 @@ export const useApiStatsStore = defineStore('apistats', () => {
   const oemSettings = ref({
     siteName: '',
     siteIcon: '',
-    siteIconData: ''
+    siteIconData: '',
+    purchaseKeyUrl: '' // 购买密钥链接
   })
 
   // 多 Key 模式相关状态
